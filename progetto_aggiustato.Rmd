@@ -1,0 +1,526 @@
+---
+title: "Carbon Risk Pricing"
+author: "Giulio Fabbri"
+date: "2023-05-19"
+output: html_document
+---
+
+```{r, message=FALSE}
+# load packages
+library(readxl)
+library(tidyverse)
+library(AER)
+library(dplyr)
+library(ggplot2)
+library(huxtable)
+```
+
+
+In sustainable finance there are two main hypotesis on how emissions are priced by the stock markets:
+- Carbon Greening Hypotesis: Higher emissions mean higher dividends that companies offer to attract investors despite being polluters
+- Future greening hypothesis: Higher emissions mean lower dividends because companies tend to keep money for investing in reducing their environmental impact
+
+The main purpose of this project is therefore to provide an elaboration of a large body of public data by showing some simple and intuitive models for investigating these relationships.
+
+
+## Data load
+```{r}
+# load dataset
+percorso= "C:/Users/Utente/OneDrive/Desktop/esami fatti/sustainable/sustainable.project/Dataset/dataset2.xlsx"
+percorso2 = "C:/Users/Utente/OneDrive/Desktop/esami fatti/sus data/dataset_pollution_col.xlsx"
+
+# financial data for each company
+data <- read_excel(percorso,sheet = "Financial Data")
+
+# direct and indirect emissions by company
+scope1 <- read_excel(percorso, sheet = "Scope1")
+scope2 <- read_excel(percorso, sheet = "Scope2")
+
+# polluter-non polluter label for each company 
+poll <- read_excel(percorso2, sheet = "Pollution")
+```
+
+## Data Preprocessing
+```{r}
+# change the column names
+colnames(data) <- c("company", "metric", "2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018", "2019", "2020")
+colnames(scope1) <- c("company", "country", "economic_sector", "sub_industry", "metric", "2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018", "2019", "2020")
+colnames(scope2) <- c("company", "metric", "2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018", "2019", "2020")
+
+# add to data the label polluter or not polluter for each company 
+data <- poll %>% left_join(data, by = 'company', multiple = "all")
+
+# find companies with scope1 and scope2 data 
+datacommon <- intersect(scope1$company, scope2$company)
+
+# find companies with only complete dataset
+data_new <- data[data$company %in% datacommon, ] 
+scope1 <- scope1[scope1$company %in% datacommon, ]
+
+#final dataset with complete informations for each company 
+df <- scope1[, 1:4] %>% left_join(data_new, by = "company", multiple = "all") 
+
+# extract market measures
+
+div <- df[df$metric == "DIVIDEND PAYOUT PER SHARE", ] %>% filter(!is.na(company))
+roe <- df[df$metric == "RETURN ON EQUITY - TOTAL (%)", ] %>% filter(!is.na(company))
+mrkt <- df[df$metric == "MRKT VALUE TO BOOK", ] %>% filter(!is.na(company))
+tot_ass <- df[df$metric == "TOTAL ASSETS", ] %>% filter(!is.na(company))
+roa <- df[df$metric == "RETURN ON ASSETS", ] %>% filter(!is.na(company))
+cap_ex <- df[df$metric == "CAPITAL EXPENDT % TOTAL ASSETS", ] %>% filter(!is.na(company))
+
+
+# WEIGHT
+tot_ass <- tot_ass %>% mutate(weight_10 = tot_ass[, '2010']/sum(tot_ass[, '2010']))
+tot_ass <- tot_ass %>% mutate(weight_11 = tot_ass[, '2011']/sum(tot_ass[, '2011']))
+tot_ass <- tot_ass %>% mutate(weight_12 = tot_ass[, '2012']/sum(tot_ass[, '2012']))
+tot_ass <- tot_ass %>% mutate(weight_13 = tot_ass[, '2013']/sum(tot_ass[, '2013']))
+tot_ass <- tot_ass %>% mutate(weight_14 = tot_ass[, '2014']/sum(tot_ass[, '2014']))
+tot_ass <- tot_ass %>% mutate(weight_15 = tot_ass[, '2015']/sum(tot_ass[, '2015']))
+tot_ass <- tot_ass %>% mutate(weight_16 = tot_ass[, '2016']/sum(tot_ass[, '2016']))
+tot_ass <- tot_ass %>% mutate(weight_17 = tot_ass[, '2017']/sum(tot_ass[, '2017']))
+tot_ass <- tot_ass %>% mutate(weight_18 = tot_ass[, '2018']/sum(tot_ass[, '2018']))
+tot_ass <- tot_ass %>% mutate(weight_19 = tot_ass[, '2019']/sum(tot_ass[, '2019']))
+tot_ass <- tot_ass %>% mutate(weight_20 = tot_ass[, '2020']/sum(tot_ass[, '2020']))
+
+# WEIGHTED Mean dividends
+div <- div %>% mutate(wa_10 = div$'2010' * tot_ass$weight_10$'2010')  
+div <- div %>% mutate(wa_11 = div$'2011' * tot_ass$weight_11$'2011')  
+div <- div %>% mutate(wa_12 = div$'2012' * tot_ass$weight_12$'2012')  
+div <- div %>% mutate(wa_13 = div$'2013' * tot_ass$weight_13$'2013')  
+div <- div %>% mutate(wa_14 = div$'2014' * tot_ass$weight_14$'2014')  
+div <- div %>% mutate(wa_15 = div$'2015' * tot_ass$weight_15$'2015')  
+div <- div %>% mutate(wa_16 = div$'2016' * tot_ass$weight_16$'2016')  
+div <- div %>% mutate(wa_17 = div$'2017' * tot_ass$weight_17$'2017')  
+div <- div %>% mutate(wa_18 = div$'2018' * tot_ass$weight_18$'2018')  
+div <- div %>% mutate(wa_19 = div$'2019' * tot_ass$weight_19$'2019')  
+div <- div %>% mutate(wa_20 = div$'2020' * tot_ass$weight_20$'2020')  
+
+div_10 <- div %>% filter(!is.na(wa_10))
+div_11 <- div %>% filter(!is.na(wa_11))
+div_12 <- div %>% filter(!is.na(wa_12))
+div_13 <- div %>% filter(!is.na(wa_13))
+div_14 <- div %>% filter(!is.na(wa_14))
+div_15 <- div %>% filter(!is.na(wa_15))
+div_16 <- div %>% filter(!is.na(wa_16))
+div_17 <- div %>% filter(!is.na(wa_17))
+div_18 <- div %>% filter(!is.na(wa_18))
+div_19 <- div %>% filter(!is.na(wa_19))
+div_20 <- div %>% filter(!is.na(wa_20))
+
+div_all <- div[complete.cases(div), ] # 18 observations
+
+year <- c(2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020)
+d_w <- c(mean(div_10$wa_10), mean(div_11$wa_11), mean(div_12$wa_12), mean(div_13$wa_13), mean(div_14$wa_14), mean(div_15$wa_15), 
+         mean(div_16$wa_16), mean(div_17$wa_17), mean(div_18$wa_18), mean(div_19$wa_19), mean(div_20$wa_20))
+new_dw <- data.frame(year, d_w)
+new_dw$year <- factor(new_dw$year,levels = new_dw$year)
+
+```
+
+```{r}
+
+# Weight direct emission of each company for the dimension of the company (for each year)
+scope1 <- scope1 %>% mutate(wa_10 = scope1$'2010' * tot_ass$weight_10$'2010')  
+scope1 <- scope1 %>% mutate(wa_11 = scope1$'2011' * tot_ass$weight_11$'2011')  
+scope1 <- scope1 %>% mutate(wa_12 = scope1$'2012' * tot_ass$weight_12$'2012')  
+scope1 <- scope1 %>% mutate(wa_13 = scope1$'2013' * tot_ass$weight_13$'2013')  
+scope1 <- scope1 %>% mutate(wa_14 = scope1$'2014' * tot_ass$weight_14$'2014')  
+scope1 <- scope1 %>% mutate(wa_15 = scope1$'2015' * tot_ass$weight_15$'2015')  
+scope1 <- scope1 %>% mutate(wa_16 = scope1$'2016' * tot_ass$weight_16$'2016')  
+scope1 <- scope1 %>% mutate(wa_17 = scope1$'2017' * tot_ass$weight_17$'2017')  
+scope1 <- scope1 %>% mutate(wa_18 = scope1$'2018' * tot_ass$weight_18$'2018')  
+scope1 <- scope1 %>% mutate(wa_19 = scope1$'2019' * tot_ass$weight_19$'2019')  
+scope1 <- scope1 %>% mutate(wa_20 = scope1$'2020' * tot_ass$weight_20$'2020')  
+
+scope1_10 <- scope1 %>% filter(!is.na(wa_10))
+scope1_11 <- scope1 %>% filter(!is.na(wa_11))
+scope1_12 <- scope1 %>% filter(!is.na(wa_12))
+scope1_13 <- scope1 %>% filter(!is.na(wa_13))
+scope1_14 <- scope1 %>% filter(!is.na(wa_14))
+scope1_15 <- scope1 %>% filter(!is.na(wa_15))
+scope1_16 <- scope1 %>% filter(!is.na(wa_16))
+scope1_17 <- scope1 %>% filter(!is.na(wa_17))
+scope1_18 <- scope1 %>% filter(!is.na(wa_18))
+scope1_19 <- scope1 %>% filter(!is.na(wa_19))
+scope1_20 <- scope1 %>% filter(!is.na(wa_20))
+
+scope1_all <- scope1[complete.cases(scope1), ] # 18 observations
+
+# weighted emission mean for each year 
+year <- c(2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020)
+
+sc_w <- c(mean(scope1_10$wa_10), mean(scope1_11$wa_11), mean(scope1_12$wa_12), mean(scope1_13$wa_13), mean(scope1_14$wa_14), mean(scope1_15$wa_15), 
+         mean(scope1_16$wa_16), mean(scope1_17$wa_17), mean(scope1_18$wa_18), mean(scope1_19$wa_19), mean(scope1_20$wa_20))
+
+new_scw <- data.frame(year, sc_w)
+new_scw$year <- factor(new_scw$year,levels = new_scw$year)
+
+
+# Weight indirect emission of each company for the dimension of the company (for each year)
+scope2 <- scope2 %>% mutate(wa_10 = scope2$'2010' * tot_ass$weight_10$'2010')  
+scope2 <- scope2 %>% mutate(wa_11 = scope2$'2011' * tot_ass$weight_11$'2011')  
+scope2 <- scope2 %>% mutate(wa_12 = scope2$'2012' * tot_ass$weight_12$'2012')  
+scope2 <- scope2 %>% mutate(wa_13 = scope2$'2013' * tot_ass$weight_13$'2013')  
+scope2 <- scope2 %>% mutate(wa_14 = scope2$'2014' * tot_ass$weight_14$'2014')  
+scope2 <- scope2 %>% mutate(wa_15 = scope2$'2015' * tot_ass$weight_15$'2015')  
+scope2 <- scope2 %>% mutate(wa_16 = scope2$'2016' * tot_ass$weight_16$'2016')  
+scope2 <- scope2 %>% mutate(wa_17 = scope2$'2017' * tot_ass$weight_17$'2017')  
+scope2 <- scope2 %>% mutate(wa_18 = scope2$'2018' * tot_ass$weight_18$'2018')  
+scope2 <- scope2 %>% mutate(wa_19 = scope2$'2019' * tot_ass$weight_19$'2019')  
+scope2 <- scope2 %>% mutate(wa_20 = scope2$'2020' * tot_ass$weight_20$'2020')  
+
+scope2_10 <- scope2 %>% filter(!is.na(wa_10))
+scope2_11 <- scope2 %>% filter(!is.na(wa_11))
+scope2_12 <- scope2 %>% filter(!is.na(wa_12))
+scope2_13 <- scope2 %>% filter(!is.na(wa_13))
+scope2_14 <- scope2 %>% filter(!is.na(wa_14))
+scope2_15 <- scope2 %>% filter(!is.na(wa_15))
+scope2_16 <- scope2 %>% filter(!is.na(wa_16))
+scope2_17 <- scope2 %>% filter(!is.na(wa_17))
+scope2_18 <- scope2 %>% filter(!is.na(wa_18))
+scope2_19 <- scope2 %>% filter(!is.na(wa_19))
+scope2_20 <- scope2 %>% filter(!is.na(wa_20))
+
+scope2_all <- scope2[complete.cases(scope2), ] # 18 observations
+
+# weighted emission mean for each year 
+year <- c(2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020)
+sc_w2 <- c(mean(scope2_10$wa_10), mean(scope2_11$wa_11), mean(scope2_12$wa_12), mean(scope2_13$wa_13), mean(scope2_14$wa_14), mean(scope2_15$wa_15), 
+         mean(scope2_16$wa_16), mean(scope2_17$wa_17), mean(scope2_18$wa_18), mean(scope2_19$wa_19), mean(scope2_20$wa_20))
+new_scw2 <- data.frame(year, sc_w2)
+new_scw2$year <- factor(new_scw2$year,levels = new_scw2$year)
+```
+
+Then we added the economic size information (considered using total assets) for ongi company 
+
+```{r}
+# ECONOMIC DIMENSION
+tot_ass <- tot_ass %>% mutate(ec_dim_10 = log(tot_ass$'2010'))  
+tot_ass <- tot_ass %>% mutate(ec_dim_11 = log(tot_ass$'2011'))
+tot_ass <- tot_ass %>% mutate(ec_dim_12 = log(tot_ass$'2012'))
+tot_ass <- tot_ass %>% mutate(ec_dim_13 = log(tot_ass$'2013'))
+tot_ass <- tot_ass %>% mutate(ec_dim_14 = log(tot_ass$'2014'))
+tot_ass <- tot_ass %>% mutate(ec_dim_15 = log(tot_ass$'2015'))
+tot_ass <- tot_ass %>% mutate(ec_dim_16 = log(tot_ass$'2016'))
+tot_ass <- tot_ass %>% mutate(ec_dim_17 = log(tot_ass$'2017'))
+tot_ass <- tot_ass %>% mutate(ec_dim_18 = log(tot_ass$'2018'))
+tot_ass <- tot_ass %>% mutate(ec_dim_19 = log(tot_ass$'2019'))
+tot_ass <- tot_ass %>% mutate(ec_dim_20 = log(tot_ass$'2020'))
+
+tot_ass$quartile <- cut(tot_ass$ec_dim_10, quantile(tot_ass$ec_dim_10),
+                            include.lowest = TRUE, labels = c("Small", "Medium", "Large", "Huge"))
+
+#add quartile and pollution info to the measure datatables
+div <- tot_ass[, c(1,40)] %>% left_join(div, by = "company")
+scope1 <- tot_ass[, c(1,5,40)] %>% left_join(scope1, by = "company")
+scope2 <- scope1[, c(1:6)] %>% left_join(scope2, by = 'company')  
+```
+
+
+## 1 The regression Dividend ~ Scope per year
+
+
+The first model we tried is of the type:
+
+**dividend_year ~ 0 + scope_year + quartile + economic sector**
+
+This allows us to eliminate the impact of size and economic sector on dividend, for each year (we know these are relevant factors).
+We can then use the model to see if there is a significant relationship between emissions and dividends for each year, holding other factors constant 
+
+```{r, warning=FALSE}
+# prepare data
+reg <- cbind(div[, c(1:6,8:18)], scope1[, c(8:18)], scope2[, c(8:18)]) 
+
+colnames(reg) <- c("company", "quartile", "country", "economic_sector", "sub_industry", "pollution", "d_10", "d_11", "d_12", "d_13", "d_14", "d_15", "d_16", "d_17", "d_18", "d_19", "d_20",
+                     "s1_10", "s1_11", "s1_12", "s1_13", "s1_14", "s1_15", "s1_16", "s1_17", "s1_18", "s1_19", "s1_20",
+                   "s2_10", "s2_11", "s2_12", "s2_13", "s2_14", "s2_15", "s2_16", "s2_17", "s2_18", "s2_19", "s2_20")
+
+reg$economic_sector <- as.factor(reg$economic_sector)
+reg$quartile <- as.factor(reg$quartile)
+```
+
+
+```{r, warning=FALSE}
+# remove outliers (boxplot were done in another file)
+Upper= 4000000
+reg_no_out <- subset(reg, reg[,18:29] < Upper)
+
+```
+
+```{r,warning=FALSE}
+#we loose 23 observations checking for outliers
+reg_no_out<-reg_no_out[1:40,]
+nrow(reg)
+nrow(reg_no_out)
+```
+
+```{r,warning=FALSE}
+# use regr no outliers
+reg<-reg_no_out
+```
+
+```{r,warning=FALSE}
+#regression dividend scope per year
+model_10s1= lm(d_10 ~ 0 + s1_10 + quartile+ economic_sector, data = reg)
+model_11s1= lm(d_11 ~ 0 + s1_11 + quartile+ economic_sector, data = reg)
+model_12s1= lm(d_12 ~ 0 + s1_12 + quartile+ economic_sector, data = reg)
+model_13s1= lm(d_13 ~ 0 + s1_13 + quartile+ economic_sector, data = reg)
+model_14s1= lm(d_14 ~ 0 + s1_14 + quartile+ economic_sector, data = reg)
+model_15s1= lm(d_15 ~ 0 + s1_15 + quartile+ economic_sector, data = reg)
+model_16s1= lm(d_16 ~ 0 + s1_16 + quartile+ economic_sector, data = reg)
+model_17s1= lm(d_17 ~ 0 + s1_17 + quartile+ economic_sector, data = reg)
+model_18s1= lm(d_18 ~ 0 + s1_18 + quartile+ economic_sector, data = reg)
+model_19s1= lm(d_19 ~ 0 + s1_19 + quartile+ economic_sector, data = reg)
+model_20s1= lm(d_20 ~ 0 + s1_20 + quartile+ economic_sector, data = reg)
+```
+
+Scope1 (direct emissions) has no statistically significant effect on dividends,  
+now we can try the same method for checking if Scope2 (indirect emissions) have no significant infuence as well.
+
+```{r,warning=FALSE}
+library(huxtable)
+huxreg(
+"2010"=model_10s1,
+"2011"=model_11s1,
+"2012"=model_12s1,
+"2013"=model_13s1,
+"2014"=model_14s1,
+"2015"=model_15s1,
+"2016"=model_16s1,
+"2017"=model_17s1,
+"2018"=model_18s1,
+"2019"=model_19s1,
+"2020"=model_20s1)
+```
+
+
+
+
+## 2 The regression dividend~scope2 per year
+
+Scope2 (indirect emissions) have no significant infuence as well.
+
+```{r}
+#regression dividend scope per year
+model_10s2= lm(d_10 ~ 0 + s2_10 + quartile+ economic_sector, data = reg)
+model_11s2= lm(d_11 ~ 0 + s2_11 + quartile+ economic_sector, data = reg)
+model_12s2= lm(d_12 ~ 0 + s2_12 + quartile+ economic_sector, data = reg)
+model_13s2= lm(d_13 ~ 0 + s2_13 + quartile+ economic_sector, data = reg)
+model_14s2= lm(d_14 ~ 0 + s2_14 + quartile+ economic_sector, data = reg)
+model_15s2= lm(d_15 ~ 0 + s2_15 + quartile+ economic_sector, data = reg)
+model_16s2= lm(d_16 ~ 0 + s2_16 + quartile+ economic_sector, data = reg)
+model_17s2= lm(d_17 ~ 0 + s2_17 + quartile+ economic_sector, data = reg)
+model_18s2= lm(d_18 ~ 0 + s2_18 + quartile+ economic_sector, data = reg)
+model_19s2= lm(d_19 ~ 0 + s2_19 + quartile+ economic_sector, data = reg)
+model_20s2= lm(d_20 ~ 0 + s2_20 + quartile+ economic_sector, data = reg)
+```
+
+```{r}
+# scope2 almost 0 effect but significant in 2015-2016
+library(huxtable)
+huxreg(
+"2010"=model_10s2,
+"2011"=model_11s2,
+"2012"=model_12s2,
+"2013"=model_13s2,
+"2014"=model_14s2,
+"2015"=model_15s2,
+"2016"=model_16s2,
+"2017"=model_17s2,
+"2018"=model_18s2,
+"2019"=model_19s2,
+"2020"=model_20s2)
+```
+Scope 2 has no significant effect as well 
+
+
+## 3 Dividend and scope per sector 2010
+
+We can have a look at the regression of scope over dividend divided by secotr, remembering that we have little data and we cannot generalzie from it 
+
+```{r, warning=FALSE}
+#dividend e scope 1
+library(ggplot2)
+ggplot(reg, aes(s1_10, d_10, color = economic_sector)) +
+  geom_point() + 
+  geom_smooth(method = lm) +
+  labs(x = "Scope 1", y = "Dividend Payout per share") +
+  scale_x_continuous(labels = scales::comma) + 
+  scale_fill_discrete(name = "Economic Sector") +
+  ggtitle("Regression of Scope1 on Dividend Payout (2010)") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+# 4 REGRESSION (2010 - 2020): TEST the paris agreements effect
+
+To test whether the paris agreement (2015) had an effect in the emission-dividend relationship we can use a model of the type:  
+
+**dividend_year ~ 0 + scope + PA + scope*PA + quartile + economic sector**
+
+this will allow, given the same size and sector, to test the effect of PAris Agreement (PA) on dividends and its interaction with scope (scope*PA)
+
+```{r}
+# reshape for regression
+reg2 <- div[, -c(7, 19:28)] %>% gather(year, div, -c(1:6)) 
+reg3 <- scope1[, -c(7)] %>% gather(year, sp1, -c(1:6))
+reg4 <- scope2[, -c(7)] %>% gather(year, sp2, -c(1:6))
+
+merge1 <- reg2[, c(1,8)] %>% left_join(reg3, by = 'company', multiple = "all")  
+merge <- reg4[, c(1,8)] %>% left_join(merge1, by = 'company', multiple = "all")
+merge <- merge[, c(1,6,7,8,4,5,9,3,10,2)]
+
+# add dummy variable paris agreement
+merge <- merge %>% mutate(pa = ifelse(year < '2015', 0, 1))
+
+#add dummy variable scope 1 with respect average
+merge <- merge %>% mutate(sp1_less_avg = ifelse(sp1 < mean(sp1), 0,1))
+
+```
+
+
+```{r, warning=FALSE}
+# check outliers
+Upper= 4000000
+reg_no_out <- subset(reg, reg[,18:29] < Upper)
+boxplot(reg_no_out[,18:29], main= "Scope1")
+boxplot(reg[,18:29], main= "Scope1 with outliers")
+boxplot(reg_no_out[,29:39], main= "Scope2") 
+boxplot(reg[,29:39], main= "Scope2 with outliers")
+```
+
+
+```{r}
+boxplot(merge$sp1, main= "Scope1 with outliers")
+boxplot(merge$sp2, main="Scope2 with outliers")
+
+```
+
+```{r}
+Upper1 <- 100000000
+Upper2<-20000000
+reg_no_out <- subset(merge, merge$sp1 < Upper1 &  merge$sp2< Upper2)
+
+boxplot(reg_no_out$sp1, main= "Scope1")
+boxplot(reg_no_out$sp2, main= "Scope2")
+```
+
+
+```{r, results='hide'}
+merge_scaled <- merge
+scale(merge_scaled[,8:10])
+```
+
+```{r error=TRUE}
+modello=lm(data= merge, div ~ 0 + sp2+ pa + sp2*pa + economic_sector+ quartile)
+huxreg("PA Effect"= modello)
+```
+
+## Conclusions for Scope1:
+1. Scope1 seems to have a significant negative effect on dividend (99% s.l.), 
+against the carbon premium hypothesis.
+But the coefficient is so small that this effect have to be classified as 
+irrelevant and not meaningful.
+2. PA coefficient is significant and negative, indicating that on average dividends have 
+decreased after the paris agreement (by little)
+3. PA have not influenced the relation dividend-scope1, in fact the Scope*PA effect is not 
+significant
+─────────────────────────────────────────────────────
+                                                                           (1)         
+                                                                   ────────────────────
+                                    sp1                                    -0.000 ***  
+                                                                           (0.000)     
+                                    pa                                     -0.349 **   
+                                                                           (0.112)     
+                                    economic_sectorBasic Materials         49.281 ***  
+                                                                           (0.156)     
+                                    economic_sectorEnergy                  47.874 ***  
+                                                                           (0.166)     
+                                    economic_sectorIndustrials             48.859 ***  
+                                                                           (0.133)     
+                                    economic_sectorTechnology              46.854 ***  
+                                                                           (0.166)     
+                                    quartileMedium                        -12.996 ***  
+                                                                           (0.128)     
+                                    quartileLarge                          -7.628 ***  
+                                                                           (0.132)     
+                                    quartileHuge                           -9.130 ***  
+                                                                           (0.134)     
+                                    sp1:pa                                  0.000      
+                                                                           (0.000)     
+                                                                   ────────────────────
+                                    N                                  274912          
+                                    R2                                      0.749      
+                                    logLik                           -1259651.176      
+                                    AIC                               2519324.352      
+                                  ─────────────────────────────────────────────────────
+                                    *** p < 0.001; ** p < 0.01; * p < 0.05.            
+
+
+## Conclusions for Scope1(same method):
+1. Scope2 has a significant positive effect on dividend (99% s.l.),In line the carbon premium hypothesis. But the coefficient is so small (1.416085e-07) hat this effect have to be classified as irrelevant and not meaningful.
+2. PA coefficient is not significant
+3. PA have not influenced the relation dividend-scope2, in fact the Scope2*PA effect 
+is not significant
+
+
+## Data exploration that was used
+
+These graphs show our sample (which I recall, is not representative of the true European composition, which is beyond our purposes of representing a methodology for investigating these issues)
+
+```{r error=TRUE}
+
+# Analysis of Economic Sector 
+ggplot(scope1, aes(x = economic_sector, fill = economic_sector)) + 
+  geom_bar(position = position_dodge()) +
+  geom_text(stat = 'count', aes(label = after_stat(count)), vjust = -0.30) +
+  labs(x = "Economic Sector", y = "Number of observations") + 
+  ggtitle("Analysis of Economic Sector (2010 - 2020)") +
+  guides(fill = 'none') + 
+  theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))  #to center
+```
+
+
+```{r error=TRUE}
+# Analysis of Economic Sector across Country
+ggplot(scope1, aes(x = country, fill = economic_sector)) + 
+  geom_bar(position = position_dodge()) +
+  labs(x = "Country", y = "Number of observations") + 
+  ggtitle("Analysis of Economic Sector across Country (2010 - 2020)") +
+  scale_fill_discrete(name = "Economic Sector") +
+  theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))  #to center
+```
+
+
+```{r error=TRUE}
+# Analysis of Economic Dimension across Economic Sector
+ggplot(tot_ass, aes(x = quartile, fill = economic_sector)) + 
+  geom_bar(position = position_dodge()) +
+  labs(x = "Quartile", y = "Number of observations") + 
+  ggtitle("Analysis of Economic Dimension (2010 - 2020)") +
+  scale_fill_discrete(name = "Economic Sector") +
+  theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))  #to center
+```
+
+
+```{r error=TRUE}
+# Analysis of Economic Dimension across Country
+ggplot(tot_ass, aes(x = country, fill = quartile)) + 
+  geom_bar(position = position_dodge()) +
+  labs(x = "Country", y = "Number of observations") + 
+  ggtitle("Analysis of Economic Dimension across Country (2010 - 2020)") +
+  scale_fill_discrete(name = "Economic Dimension") +
+  theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))  #to center
+```
+
+
+```{r error=TRUE}
+# Analysis of Tot Assets across Country
+ggplot(tot_ass, aes(x = country, y = '2010', color = economic_sector, size = ec_dim_10)) +
+  geom_point(alpha=0.7) + 
+  labs(x = 'Country', y = 'Total Assets') + 
+  ggtitle("Analysis of Total Assets (2010)") +
+  theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))  #to center
+```
